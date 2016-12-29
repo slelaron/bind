@@ -22,9 +22,9 @@ struct kth_proj
 {
 	typedef typename kth_proj <k - 1, typename U::next_list>::ret_value ret_value;
 
-	ret_value operator()(U lst)
+	ret_value&& operator()(U lst)
 	{
-		return kth_proj <k - 1, typename U::next_list> ()(lst.nxt);
+		return std::forward <ret_value> (kth_proj <k - 1, typename U::next_list> ()(lst.nxt));
 	}
 };
 
@@ -43,31 +43,31 @@ template <typename F, typename T, typename... Args>
 struct data
 {
 	data <F, Args...> nxt;
-	T val;
-	data(F&& func, T&& _val, Args&&... args):
-		nxt(data <F, Args...> (std::forward <F> (func), std::forward <Args> (args)...)),
+	T& val;
+	data(F func, T&& _val, Args&&... args):
+		nxt(data <F, Args...> (func, std::forward <Args> (args)...)),
 		val(_val)
 	{}
 
 	template <typename U, typename... New>
 	auto operator()(U lst, New&&... args)
 	{
-		return nxt(lst, std::forward <New> (args)..., std::forward <T> (val));
+		return nxt(lst, std::forward <New> (args)..., val);
 	}
 };
 
 template <typename F, size_t N, typename... Args>
-struct data <F, place_holder <N>, Args...>
+struct data <F, place_holder <N>&, Args...>
 {
 	data <F, Args...> nxt;
-	data(F&& func, place_holder <N> ph, Args&&... args):
-		nxt(data <F, Args...> (std::forward <F> (func), std::forward <Args> (args)...))
+	data(F func, place_holder <N>& ph, Args&&... args):
+		nxt(data <F, Args...> (func, std::forward <Args> (args)...))
 	{}
 
 	template <typename U, typename... New>
 	auto operator()(U lst, New&&... args)
 	{
-		return nxt(lst, std::forward <New> (args)..., kth_proj <N, U> ()(lst));
+		return nxt(lst, std::forward <New> (args)..., std::forward <typename kth_proj <N, U>::ret_value> (kth_proj <N, U> ()(lst)));
 	}
 };
 
@@ -76,8 +76,8 @@ struct data <F, bind_function <F1, Args1...>, Args...>
 {
 	data <F, Args...> nxt;
 	bind_function <F1, Args1...> val;
-	data(F&& func, bind_function <F1, Args1...> _val, Args&&... args):
-		nxt(data <F, Args...> (std::forward <F> (func), std::forward <Args> (args)...)),
+	data(F func, bind_function <F1, Args1...> _val, Args&&... args):
+		nxt(data <F, Args...> (func, std::forward <Args> (args)...)),
 		val(_val)
 	{}
 
@@ -92,8 +92,8 @@ template <typename F>
 struct data <F, null_pointer>
 {
 	F func;
-	data(F&& _func, null_pointer):
-		func(std::forward <F> (_func))
+	data(F _func, null_pointer):
+		func(_func)
 	{}
 
 	template <typename U, typename... New>
@@ -110,23 +110,28 @@ struct list
 template <typename T, typename... Args>
 struct list <T, Args...>
 {
-	T&& val;
+	T& val;
 	typedef T ret_value;
 	typedef list <Args...> next_list;
-	list <Args...> nxt;
+	const list <Args...> nxt;
 	list(T&& arg, Args&&... args):
-		val(std::forward <T> (arg)),
+		val(arg),
 		nxt(list <Args...> (std::forward <Args> (args)...))
 	{}
+	//list (list <T, Args...> lst):
+		//val(std::forward <T> (lst.val)),
+		//nxt(std::forward <Args...> (lst.nxt))
+	//{
+	//}
 };
 
 template <typename T>
 struct list <T>
 {
 	typedef T ret_value;
-	T&& val;
+	T& val;
 	list(T&& arg):
-		val(std::forward <T> (arg))
+		val(arg)
 	{}
 };
 
@@ -134,8 +139,8 @@ template <typename F, typename... Args>
 struct bind_function
 {
 	data <F, Args..., null_pointer> nxt;
-	bind_function(F&& _func, Args&&... args):
-		nxt(data <F, Args..., null_pointer> (std::forward <F> (_func), std::forward<Args> (args)..., null_pointer()))
+	bind_function(F _func, Args&&... args):
+		nxt(data <F, Args..., null_pointer> (_func, std::forward <Args> (args)..., null_pointer()))
 	{}
 
 	template <typename... New>
@@ -152,9 +157,9 @@ struct bind_function
 };
 
 template <typename F, typename... Args>
-auto bind(F func, Args... args)
+auto bind(F func, Args&&... args)
 {
-	return bind_function <F, Args...>(std::forward <F> (func), std::forward <Args> (args)...);
+	return bind_function <F, Args...>(func, std::forward <Args> (args)...);
 }
 
 using namespace std;
@@ -184,7 +189,7 @@ void print()
 
 int main()
 {
-	cout << bind(add, bind(mull(), _1, _2), bind(mul, _1, _1), _4, 4)(2, 2, 3, 6) << endl;
+	cout << bind(add, bind(mull(), _1, _2), _2, _4, 4)(2, 2, 3, 6) << endl;
 	bind(print)();
 	return 0;
 }
