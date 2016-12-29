@@ -33,9 +33,9 @@ struct kth_proj <1, U>
 {
 	typedef typename U::ret_value ret_value;
 	
-	ret_value operator() (U lst)
+	ret_value&& operator() (U lst)
 	{
-		return lst.val;
+		return std::forward <ret_value> (lst.val);
 	}
 };
 
@@ -44,15 +44,15 @@ struct data
 {
 	data <F, Args...> nxt;
 	T val;
-	data(F func, T _val, Args... args):
-		nxt(data <F, Args...> (func, args...)),
+	data(F&& func, T&& _val, Args&&... args):
+		nxt(data <F, Args...> (std::forward <F> (func), std::forward <Args> (args)...)),
 		val(_val)
 	{}
 
 	template <typename U, typename... New>
-	auto operator()(U lst, New... args)
+	auto operator()(U lst, New&&... args)
 	{
-		return nxt(lst, args..., val);
+		return nxt(lst, std::forward <New> (args)..., std::forward <T> (val));
 	}
 };
 
@@ -60,14 +60,14 @@ template <typename F, size_t N, typename... Args>
 struct data <F, place_holder <N>, Args...>
 {
 	data <F, Args...> nxt;
-	data(F func, place_holder <N> ph, Args... args):
-		nxt(data <F, Args...> (func, args...))
+	data(F&& func, place_holder <N> ph, Args&&... args):
+		nxt(data <F, Args...> (std::forward <F> (func), std::forward <Args> (args)...))
 	{}
 
 	template <typename U, typename... New>
-	auto operator()(U lst, New... args)
+	auto operator()(U lst, New&&... args)
 	{
-		return nxt(lst, args..., kth_proj <N, U> ()(lst));
+		return nxt(lst, std::forward <New> (args)..., kth_proj <N, U> ()(lst));
 	}
 };
 
@@ -76,15 +76,15 @@ struct data <F, bind_function <F1, Args1...>, Args...>
 {
 	data <F, Args...> nxt;
 	bind_function <F1, Args1...> val;
-	data(F func, bind_function <F1, Args1...> _val, Args... args):
-		nxt(data <F, Args...> (func, args...)),
+	data(F&& func, bind_function <F1, Args1...> _val, Args&&... args):
+		nxt(data <F, Args...> (std::forward <F> (func), std::forward <Args> (args)...)),
 		val(_val)
 	{}
 
 	template <typename U, typename... New>
-	auto operator()(U lst, New... args)
+	auto operator()(U lst, New&&... args)
 	{
-		return nxt(lst, args..., val.start_with_list(lst));
+		return nxt(lst, std::forward <New> (args)..., val.start_with_list(lst));
 	}
 };
 
@@ -92,27 +92,31 @@ template <typename F>
 struct data <F, null_pointer>
 {
 	F func;
-	data(F _func, null_pointer):
-		func(_func)
+	data(F&& _func, null_pointer):
+		func(std::forward <F> (_func))
 	{}
 
 	template <typename U, typename... New>
-	auto operator()(U lst, New... args)
+	auto operator()(U lst, New&&... args)
 	{
-		return func(args...);
+		return func(std::forward <New> (args)...);
 	}
 };
 
-template <typename T, typename... Args>
+template <typename... Args>
 struct list
+{};
+
+template <typename T, typename... Args>
+struct list <T, Args...>
 {
-	T val;
+	T&& val;
 	typedef T ret_value;
-	typedef list < Args...> next_list;
+	typedef list <Args...> next_list;
 	list <Args...> nxt;
-	list(T arg, Args... args):
-		val(arg),
-		nxt(list <Args...> (args...))
+	list(T&& arg, Args&&... args):
+		val(std::forward <T> (arg)),
+		nxt(list <Args...> (std::forward <Args> (args)...))
 	{}
 };
 
@@ -120,9 +124,9 @@ template <typename T>
 struct list <T>
 {
 	typedef T ret_value;
-	T val;
-	list(T arg):
-		val(arg)
+	T&& val;
+	list(T&& arg):
+		val(std::forward <T> (arg))
 	{}
 };
 
@@ -130,14 +134,14 @@ template <typename F, typename... Args>
 struct bind_function
 {
 	data <F, Args..., null_pointer> nxt;
-	bind_function(F _func, Args... args):
-		nxt(data <F, Args..., null_pointer> (_func, args..., null_pointer()))
+	bind_function(F&& _func, Args&&... args):
+		nxt(data <F, Args..., null_pointer> (std::forward <F> (_func), std::forward<Args> (args)..., null_pointer()))
 	{}
 
 	template <typename... New>
-	auto operator()(New... args)
+	auto operator()(New&&... args)
 	{
-		return nxt(list <New...> (args...));
+		return nxt(list <New...> (std::forward <New> (args)...));
 	}
 
 	template <typename U>
@@ -150,7 +154,7 @@ struct bind_function
 template <typename F, typename... Args>
 auto bind(F func, Args... args)
 {
-	return bind_function <F, Args...>(func, args...);
+	return bind_function <F, Args...>(std::forward <F> (func), std::forward <Args> (args)...);
 }
 
 using namespace std;
@@ -173,8 +177,14 @@ int mul(int a, int b)
 	return a * b;
 }
 
+void print()
+{
+	cout << "Hello!" << endl;
+}
+
 int main()
 {
-	cout << bind(add, bind(mull(), _1, _2), bind(mul, _1, 2), _4, 10)(1, 2, 3, 4) << endl;
+	cout << bind(add, bind(mull(), _1, _2), bind(mul, _1, _1), _4, 4)(2, 2, 3, 6) << endl;
+	bind(print)();
 	return 0;
 }
