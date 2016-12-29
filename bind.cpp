@@ -187,9 +187,21 @@ void print()
 	cout << "Hello!" << endl;
 }
 
+void q(int& a, int &b)
+{
+	a = 5;
+	b = 1;
+}
+
 int main()
 {
+	int a, b;
+	a = 10;
+	b = 4;
 	cout << bind(add, bind(mull(), _1, _2), _2, _4, 4)(2, 2, 3, 6) << endl;
 	bind(print)();
+	bind(q, _1, _2)(a, b);
+	bind(q, a, b)();
+	cout << a << ' '<< b << endl;
 	return 0;
 }
